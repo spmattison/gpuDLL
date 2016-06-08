@@ -54,7 +54,8 @@ interest from each a-line as an array of complex numbers
 */
 EXTERN int gpuProcessComplex(
 	U16 *raw, //Raw Interferogram
-	Complex *output //Cropped complex output
+	float *outputR,
+	float* outputI//Cropped complex output
 	);
 
 /*
@@ -173,7 +174,8 @@ coming from the FPGA
 
 EXTERN int gpuProcessComplexInterped(
 	float *raw,
-	Complex *output);
+	float *output,
+	float *outputI);
 
 /*
 

@@ -10,7 +10,7 @@ called to setup parameters of the GPU, only call once prior to scan start. If an
 to scan parameters, these parameters must be updated
 */
 GPUFUNCSDLL int setupGPU(float *disp, float *win, int rAlineSize, int fftS, int nAlines, int cropS, int cropEnd, bool outputComplex){
-	if (digitizer = 0){
+	if (digitizer == 0){
 		return (gpuProcessSetup(disp, win, fftS, nAlines, rAlineSize, cropS, cropEnd, outputComplex));
 	}
 	else{
@@ -41,13 +41,13 @@ GPUFUNCSDLL void setDigitizer(int in){
 	digitizer = in;
 }
 /*
-processComplex
+processComplexInterped
 
 Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 4096 point FFT.
 */
-GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *processedData){
-	return (gpuProcessMagnitudeInterped(rawSpectrogram, processedData));
+GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *outputReal, float *outputImaginary){
+	return (gpuProcessComplexInterped(rawSpectrogram, outputReal, outputImaginary));
 }
 
 /*
@@ -56,8 +56,8 @@ processComplex
 Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 4096 point FFT.
 */
-GPUFUNCSDLL int processComplex(U16 *rawSpectrogram, Complex *processedData){
-	return (gpuProcessComplex(rawSpectrogram, processedData));
+GPUFUNCSDLL int processComplex(U16 *rawSpectrogram, float *outReal, float *outImaginary){
+	return (gpuProcessComplex(rawSpectrogram, outReal, outImaginary));
 }
 
 /*
@@ -101,7 +101,7 @@ SOON TO BE DEPRECATED
 processes a datasetas chunks, only use if Size is greater than maximum
 process as chunks requires chunks to be equal sizes, and requires the
 number of alines in setup to be set to chunk size
-*/
+
 GPUFUNCSDLL int processComplexAsChunks(U16 *rawSpectrogram, Complex *processedData, int rawSize, int cropSize, int nAlines, int alinesPerChunk){
 	int repetitions = nAlines / alinesPerChunk;
 	int leftOvers = nAlines % alinesPerChunk; //This should always be zero
@@ -124,7 +124,7 @@ GPUFUNCSDLL int processComplexAsChunks(U16 *rawSpectrogram, Complex *processedDa
 		free(toProcess);
 	}
 	return error;
-}
+}*/
 
 /*
 clearGPUSettings()
@@ -180,10 +180,10 @@ GPUFUNCSDLL int pingError(){
 	return gpuGetError();
 }
 
-/*
-This is not the function you're looking for...
 
-move along, move along
+//This is not the function you're looking for...
+
+//move along, move along
 
 extern "C" int main(){
 	int nAlines = 16383;
@@ -194,17 +194,19 @@ extern "C" int main(){
 	int cropLength = 1024;
 
 	U16 *raw;
-	Complex *cropped;
+	float *croppedR;
+	float *croppedI;
 	raw = (U16 *)malloc(rAlineSize*nAlines*sizeof(U16));
-	cropped = (Complex *)malloc(cropLength *nAlines*sizeof(Complex));
-	cropped[nAlines * cropLength - 1].x = 100;
-	cropped[0].x = -10;
+	croppedR = (float *)malloc(cropLength *nAlines*sizeof(float));
+	croppedI = (float *)malloc(cropLength * nAlines * sizeof(float));
+	croppedR[nAlines * cropLength - 1] = 100;
+	croppedR[0] = -10;
 	cout << "Size = " << nAlines * cropLength << endl;
-	cout << cropped[nAlines * cropLength - 1].x << ' ' << cropped[0].x <<  endl;
+	cout << croppedR[nAlines * cropLength - 1] << ' ' << croppedI[0] <<  endl;
 	for (int i = 0; i<rAlineSize*nAlines; ++i){
 		raw[i] = 5;//sin(2 * 3.14159*float(i) / 360);
 	}
-
+	cout << raw[10] << endl;
 	//printf("%d\n", raw[nAlines*rAlineSize - 1]);
 	float *dispReal = (float *)malloc(rAlineSize * sizeof(float));
 	//disp = (Complex *)malloc(validAlineSize * sizeof(Complex));
@@ -221,20 +223,22 @@ extern "C" int main(){
 
 
 	int status = setupGPU(dispReal, win, rAlineSize, fftSize, nAlines, 0, cropLength, true);
+	cout << "Status: " << status << endl;
 
-	printf("%d\n", status);
+	//printf("Status : %d\n", status);
 
 	//status = processAsWhole(raw, cropped);
 	//status = processAsChunks(raw, cropped, rAlineSize, cropLength, nAlines, chunkSize);
 	//high_resolution_clock::time_point t4 = high_resolution_clock::now();
 
 	
-	printf("%d\n", status);
+	//printf("Status: %d\n", status);
 
 	//printf("%f %f %f\n", cropped[0], cropped[1], cropped[(nAlines - 1)*cropLength]);
-
+	status = pingError();
+	cout << status << endl;
 	high_resolution_clock::time_point t3 = high_resolution_clock::now();
-	int error = gpuProcessComplex(raw, cropped);
+	int error = gpuProcessComplex(raw, croppedR, croppedI);
 	high_resolution_clock::time_point t4 = high_resolution_clock::now();
 	auto duration2 = duration_cast<microseconds>(t4 - t3).count();
 
@@ -249,6 +253,7 @@ extern "C" int main(){
 	free(win);
 
 	free(raw);
-	free(cropped);
+	free(croppedR);
+	free(croppedI);
 	return 0;
-}*/
+}

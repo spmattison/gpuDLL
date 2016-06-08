@@ -45,9 +45,10 @@ Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 */
 GPUFUNCSDLL int processComplex(
 	U16 *rawSpectrogram,
-	Complex *processedData);
+	float *outReal,
+	float *outImag);
 
-GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *processedData);
+GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *processedData, float *processes);
 GPUFUNCSDLL int processMagnitudeInterped(float *rawSpectrogram, float *processedData);
 
 /*

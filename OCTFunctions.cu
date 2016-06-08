@@ -41,7 +41,8 @@ Complex *d_fftOut; //Device holder for FFT processed data
 
 //Only d_cropF or c_cropC is utilized, not both
 float *d_cropF; //Device holder for cropped magnitude of OCT
-Complex *d_cropC; //Device holder for croppled Complex OCT data 
+float *d_croppedR; //Device holder for real part of cropped Complex OCT data 
+float *d_croppedI; //Device holder for imaginary part of cropped Complex OCT data
 
 bool returnComplex;
 int blockSize; //Size of GPU block for computation
@@ -155,7 +156,8 @@ extern "C" int gpuProcessSetupInterped(
 	//If the program expects to receive complex data
 	if (returnComplex){
 		//Allocate memory for the cropped dataset
-		cudaMalloc(&d_cropC, cropRange * nAlines * sizeof(Complex));
+		cudaMalloc(&d_croppedR, cropRange * nAlines * sizeof(float));
+		cudaMalloc(&d_croppedI, cropRange * nAlines * sizeof(float));
 		//Ensure memory allocation was successful
 		if (cudaGetLastError() != cudaSuccess)
 			return -9; //cudaMalloc Error Code
@@ -289,6 +291,7 @@ extern "C" int gpuProcessSetup(
 	//Allocate memory on the GPU for the source interferogram
 	cudaMalloc(&d_src, rawSize*numAlines*sizeof(U16));
 	//Ensure memory allocation was successful
+	cout << "d_src Allocated!" << endl;
 	if (cudaGetLastError() != cudaSuccess)
 		return -9; //cudaMalloc Error Code
 
@@ -308,7 +311,8 @@ extern "C" int gpuProcessSetup(
 	//If the program expects to receive complex data
 	if (returnComplex){
 		//Allocate memory for the cropped dataset
-		cudaMalloc(&d_cropC, cropRange * nAlines * sizeof(Complex));
+		cudaMalloc(&d_croppedR, cropRange * nAlines * sizeof(float));
+		cudaMalloc(&d_croppedI, cropRange * nAlines * sizeof(float));
 		//Ensure memory allocation was successful
 		if (cudaGetLastError() != cudaSuccess)
 			return -9; //cudaMalloc Error Code
@@ -409,7 +413,9 @@ coming from the FPGA
 
 EXTERN int gpuProcessComplexInterped(
 	float *raw,
-	Complex *output){
+	float *outputR,
+	float *outputI)
+{
 
 	int errorCode = 0; //initializes error code for debugging
 	//std::copy(&raw[0], &raw[rawSize * numAlines - 1], &input[0]);
@@ -436,7 +442,7 @@ EXTERN int gpuProcessComplexInterped(
 		errorCode = -3; //FFT Error Code
 
 	//Attempt to crop the data
-	simpleCrop << <32768, 1024 >> >(d_fftOut, d_cropC, fftLength,
+	simpleCrop << <32768, 1024 >> >(d_fftOut, d_croppedR, d_croppedI, fftLength,
 		cropStart, cropRange, numAlines);
 
 	//Ensure crop was successful
@@ -444,7 +450,9 @@ EXTERN int gpuProcessComplexInterped(
 		errorCode = -5; //crop Error Code
 
 	//Attempt to copy data from device to host
-	cudaMemcpy(output, d_cropC, cropRange*numAlines*sizeof(Complex),
+	cudaMemcpy(outputR, d_croppedR, cropRange*numAlines*sizeof(float),
+		cudaMemcpyDeviceToHost);
+	cudaMemcpy(outputI, d_croppedI, cropRange*numAlines*sizeof(float),
 		cudaMemcpyDeviceToHost);
 	/* NOT IN USE
 	//Move from pinned memory to main memory
@@ -522,11 +530,13 @@ interest from each a-line as an array of complex numbers
 */
 EXTERN int gpuProcessComplex(
 	U16 *raw, //Raw interferogram
-	Complex *output)//Cropped complex output
+	float *outputR,
+	float *outputI)//Cropped complex output
 {
 	int errorCode = 0; //initializes error code for debugging
-	//std::copy(&raw[0], &raw[rawSize * numAlines - 1], &input[0]);
+
 	// Attempt to copy raw interferogram to GPU memory
+
 	cudaMemcpy(d_src, raw, rawSize * numAlines * sizeof(U16),
 		       cudaMemcpyHostToDevice);
 
@@ -549,7 +559,7 @@ EXTERN int gpuProcessComplex(
 		errorCode = -3; //FFT Error Code
 
 	//Attempt to crop the data
-	simpleCrop <<<32768, 1024>>>(d_fftOut, d_cropC, fftLength, 
+	simpleCrop <<<32768, 1024>>>(d_fftOut, d_croppedR, d_croppedI, fftLength, 
 		                         cropStart, cropRange, numAlines);
 
 	//Ensure crop was successful
@@ -557,8 +567,10 @@ EXTERN int gpuProcessComplex(
 		errorCode = -5; //crop Error Code
 
 	//Attempt to copy data from device to host
-	cudaMemcpy(output, d_cropC, cropRange*numAlines*sizeof(Complex),
+	cudaMemcpy(outputR, d_croppedR, cropRange*numAlines*sizeof(float),
 		       cudaMemcpyDeviceToHost);
+	cudaMemcpy(outputI, d_croppedI, cropRange*numAlines*sizeof(float),
+		cudaMemcpyDeviceToHost);
 	/* NOT IN USE
 	//Move from pinned memory to main memory
 	//std::copy(&output[0], &outputC[cropRange*numAlines - 1], &output[0]);
@@ -638,7 +650,8 @@ EXTERN int gpuClear(){
 	cudaFree(d_fftIn);//Deallocate memory
 	cudaFree(d_fftOut);//Deallocate memory
 	if (returnComplex){ //If returning complex data
-		cudaFree(d_cropC); //Free allocated device memory
+		cudaFree(d_croppedR); //Free allocated device memory
+		cudaFree(d_croppedI);
 		//cudaFreeHost(outputC); //Free allocated host memory
 	}
 	else{
@@ -681,7 +694,8 @@ EXTERN int gpuFlipOutputType(){
 		returnComplex = !returnComplex; //negate returnComplex
 
 		//Dellocate Memory
-		cudaFree(d_cropC);
+		cudaFree(d_croppedR);
+		cudaFree(d_croppedI);
 		//cudaFreeHost(outputC);
 
 		
@@ -700,7 +714,8 @@ EXTERN int gpuFlipOutputType(){
 		//cudaFreeHost(outputF);
 
 		//Allocate memory
-		cudaMalloc(&d_cropC, numAlines * cropRange * sizeof(Complex));
+		cudaMalloc(&d_croppedR, numAlines * cropRange * sizeof(float));
+		cudaMalloc(&d_croppedI, numAlines * cropRange * sizeof(float));
 		/*cudaMallocHost(&outputC, 
 			           numAlines * cropRange * sizeof(Complex));*/
 	}

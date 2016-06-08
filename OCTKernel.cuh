@@ -118,7 +118,8 @@ batch to a region of interest.
 */
 __global__ void simpleCrop(
 	Complex *input, //Input data, result of the FFT
-	Complex *cropped, //Destination array
+	float *croppedR,
+	float *croppedI,//Destination array
 	int fftL, //Length of Fourier Transform (or current A-line Length)
 	int cropStart, //Start index of the region of interest
 	int cropRange, //Length of the region of interest
