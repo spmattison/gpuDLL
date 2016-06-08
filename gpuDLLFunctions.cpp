@@ -1,6 +1,7 @@
 #include "OCTFunctions.cuh"
 #include "gpuDLLFunctions.h"
 
+
 int digitizer = 0; // 0 = Alazar, 1 = FPGA
 /*
 setupGPU
@@ -32,17 +33,20 @@ processComplex
 Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 4096 point FFT.
 */
-GPUFUNCSDLL int processMagnitude(float *rawSpectrogram, float *processedData){
+GPUFUNCSDLL int processMagnitudeInterped(float *rawSpectrogram, float *processedData){
 	return (gpuProcessMagnitudeInterped(rawSpectrogram, processedData));
 }
 
+GPUFUNCSDLL void setDigitizer(int in){
+	digitizer = in;
+}
 /*
 processComplex
 
 Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 4096 point FFT.
 */
-GPUFUNCSDLL int processComplex(float *rawSpectrogram, float *processedData){
+GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *processedData){
 	return (gpuProcessMagnitudeInterped(rawSpectrogram, processedData));
 }
 

@@ -422,7 +422,7 @@ EXTERN int gpuProcessComplexInterped(
 		errorCode = -1; //MemcpytoDevice failure error code
 
 	//Attempt to perform dispersion compensation
-	padDispersion << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
+	padDispersionInterped << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
 		rawSize, fftLength, numAlines);
 
 	//ensure disperison compensation success
@@ -483,7 +483,7 @@ EXTERN int gpuProcessMagnitudeInterped(
 		errorCode = -1; //MemcpytoDevice failure error code
 
 	//Attempt to perform dispersion compensation
-	padDispersion << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
+	padDispersionInterped << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
 		rawSize, fftLength, numAlines);
 
 	//ensure disperison compensation success
@@ -623,6 +623,7 @@ EXTERN int gpuProcessMagnitude(U16 * raw, float *output){
 
 EXTERN int clearInterped(){
 	cudaFree(d_floatSrc);
+	return 0;
 }
 /*
 endProgram

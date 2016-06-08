@@ -47,8 +47,8 @@ GPUFUNCSDLL int processComplex(
 	U16 *rawSpectrogram,
 	Complex *processedData);
 
-GPUFUNCSDLL int processComplex(float *rawSpectrogram, float *processedData);
-GPUFUNCSDLL int processMagnitude(float *rawSpectrogram, float *processedData);
+GPUFUNCSDLL int processComplexInterped(float *rawSpectrogram, float *processedData);
+GPUFUNCSDLL int processMagnitudeInterped(float *rawSpectrogram, float *processedData);
 
 /*
 pintError
@@ -159,3 +159,5 @@ A pointless function that allows me to ensure the DLL is working
 GPUFUNCSDLL int test(int a, int b);
 
 EXTERN int clearInterped();
+
+GPUFUNCSDLL void setDigitizer(int in);

@@ -139,7 +139,8 @@ __global__ void padDispersionInterped(
 	float *window, //preloaded window function
 	int rawL,  //length of the raw interferogram
 	int fftL,  //target length of the FFT
-	int nAlines){
+	int nAlines)
+{
 	//calculate the index of the current thread
 	int thrId = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -166,7 +167,7 @@ __global__ void padDispersionInterped(
 		//result is written to an predefined, zero-paddedarray
 		toProcess[outId] = output;
 
-
+	}
 		//The following code section is deprecated following the switch
 		//from cuFloatComplex to float2
 		//toProcess[outId] = make_cuFloatComplex(output.x, output.y);
