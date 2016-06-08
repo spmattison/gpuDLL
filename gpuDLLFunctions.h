@@ -8,6 +8,7 @@
 
 using namespace std;
 
+
 /*
 setupGPU
 
@@ -45,6 +46,9 @@ Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 GPUFUNCSDLL int processComplex(
 	U16 *rawSpectrogram,
 	Complex *processedData);
+
+GPUFUNCSDLL int processComplex(float *rawSpectrogram, float *processedData);
+GPUFUNCSDLL int processMagnitude(float *rawSpectrogram, float *processedData);
 
 /*
 pintError
@@ -153,3 +157,5 @@ funTimes
 A pointless function that allows me to ensure the DLL is working
 */
 GPUFUNCSDLL int test(int a, int b);
+
+EXTERN int clearInterped();

@@ -35,6 +35,7 @@ float *d_win;	 //Device holder for the window function
 
 //Device holders for processing data
 U16 *d_src;		//Device holder for the initial input data
+float *d_floatSrc; //Device Holder for interpolated input data;
 Complex *d_fftIn; //Device holder for data ready for FFT processing
 Complex *d_fftOut; //Device holder for FFT processed data
 
@@ -84,6 +85,161 @@ EXTERN int zeroPad(Complex *in, int length){
 	}
 	return 0;
 } //End zeroPad
+
+/*
+gpuProcessSetupInterped
+
+Runs once to allocated necessary memory and prepare necessary
+predefined datasets. This function was written for using floating
+point data coming from the FPGA
+*/
+extern "C" int gpuProcessSetupInterped(
+	float *disp, //Raw dispersion phase angles
+	float *win, //Desired window function
+	int fftSize, //Length of the FFT
+	int nAlines, //number of alines
+	int rAlineSize, //length of interferogram
+	int cropS, //start location for the region of interest
+	int cropEnd, //end point for region of interest
+	bool retComplex) //flag for output type
+{
+
+	numAlines = nAlines; //set number of Alines
+	rawSize = rAlineSize; //set length of raw interferogram
+	cropStart = cropS; //set start location of crop
+	cropRange = cropEnd - cropS; //Set length of crop
+	fftLength = fftSize; //set FFTlength
+
+	//set the output type as complex(true) or float(false)
+	returnComplex = retComplex;
+
+	//ensure crop does not try to address out of bounds
+	if ((cropRange + cropStart) > fftLength){
+		cropRange = fftLength - cropStart;
+	}
+
+	//Allocate an array of zeroes for zero padding of interferogram
+	Complex *zeroes;
+	zeroes = (Complex *)malloc(sizeof(Complex)*fftLength*numAlines);
+
+	//Fill zero array with zeros 
+	//Ensures no left over data (worth the 2 ms for a 1x process)
+	zeroPad(zeroes, numAlines * fftLength);
+
+	//Create an array for saving dispersion
+	Complex *dispersion = (Complex*)malloc(rawSize*sizeof(Complex));
+
+	//Generate the sines and cosines of the raw dispersion data
+	//Saves calculation time later
+	createDispersion(disp, dispersion, rawSize);
+
+	//Allocate memory on the GPU for the source interferogram
+	cudaMalloc(&d_floatSrc, rawSize*numAlines*sizeof(float));
+	//Ensure memory allocation was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+
+	//Allocate memory on GPU for the disperison compensated
+	//and zero padded interferogram, prior to FFT
+	cudaMalloc(&d_fftIn, fftLength*nAlines*sizeof(Complex));
+	//Ensure memory allocation was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+
+	//Allocate Memory on GPU for output of FFT
+	cudaMalloc(&d_fftOut, fftLength * nAlines*sizeof(Complex));
+	//Ensure memory allocation was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+
+	//If the program expects to receive complex data
+	if (returnComplex){
+		//Allocate memory for the cropped dataset
+		cudaMalloc(&d_cropC, cropRange * nAlines * sizeof(Complex));
+		//Ensure memory allocation was successful
+		if (cudaGetLastError() != cudaSuccess)
+			return -9; //cudaMalloc Error Code
+
+		/*
+		(NOT IN USE) Allocate host pinned memory for data transfer from device
+
+		cudaMallocHost(&outputC,
+		cropRange * nAlines * sizeof(Complex));
+
+
+		//Ensure memory allocation was successful
+		if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code*/
+	}
+	//If the program expects to receive magnitude data (floating point)
+	else {
+
+		//Allocate memory for the cropped dataset
+		cudaMalloc(&d_cropF, cropRange * nAlines * sizeof(float));
+		//Ensure memory allocation was successful
+		if (cudaGetLastError() != cudaSuccess)
+			return -9; //cudaMalloc Error Code
+
+		/* NOT CURRENTLY IN USE
+		//Allocate host pinned memory for data transfer from device
+		cudaMallocHost(&outputF, cropRange* nAlines * sizeof(float));
+		//Ensure memory allocation was successful
+		if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+		*/
+	}
+
+	/* NOT CURRENTLY IN USE
+	//Allocate host pinned memory for data transfer to device
+	cudaMallocHost(&input, rawSize * nAlines * sizeof(U16));
+
+	*/
+	//Allocate device memory for dispersion data
+	cudaMalloc(&d_disp, rawSize*sizeof(float));
+	//Ensure memory allocation was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+
+	//Allocate device memory for the window function
+	cudaMalloc(&d_win, rawSize*sizeof(float));
+	//Ensure memory allocation was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -9; //cudaMalloc Error Code
+
+	//Transfer dispersion data to device
+	cudaMemcpy(d_disp, dispersion, rawSize*sizeof(float),
+		cudaMemcpyHostToDevice);
+	//Ensure data transfer was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -1; //Memcpy to device Error Code
+
+	//Transfer zeroes for zero padding to device
+	cudaMemcpy(d_fftIn, zeroes, sizeof(Complex)*fftLength*numAlines,
+		cudaMemcpyHostToDevice);
+	//Ensure data transfer was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -1; //Memcpy to device Error Code
+
+
+
+	//Copy window function to device
+	cudaMemcpy(d_win, win, rawSize*sizeof(float),
+		cudaMemcpyHostToDevice);
+	//Ensure data transfer was successful
+	if (cudaGetLastError() != cudaSuccess)
+		return -1; //Memcpy to device Error Code
+
+	//Generate Batch FFT plan and ensure success
+	if (cufftPlan1d(&fftPlan, fftLength,
+		CUFFT_C2C, nAlines) != CUFFT_SUCCESS)
+		return -10; //cudaMalloc Error Code
+
+	//Deallocate useless memory
+	free(dispersion);
+	free(zeroes);
+
+	return 0;
+} //End gpuProcessSetupInterped
 
 /*
 gpuProcessSetup
@@ -241,6 +397,122 @@ extern "C" int gpuProcessSetup(
 
 
 /*************************Process Functions***************************/
+/*
+
+processComplexInterped
+
+This function takes input from the digitizer and outputs the magnitude
+of the region of interest from each a-line as an array of floating
+point numbers. This function assumes you are using interpolated data
+coming from the FPGA
+*/
+
+EXTERN int gpuProcessComplexInterped(
+	float *raw,
+	Complex *output){
+
+	int errorCode = 0; //initializes error code for debugging
+	//std::copy(&raw[0], &raw[rawSize * numAlines - 1], &input[0]);
+	// Attempt to copy raw interferogram to GPU memory
+	cudaMemcpy(d_floatSrc, raw, rawSize * numAlines * sizeof(float),
+		cudaMemcpyHostToDevice);
+
+	//Ensure memory copy success
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -1; //MemcpytoDevice failure error code
+
+	//Attempt to perform dispersion compensation
+	padDispersion << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
+		rawSize, fftLength, numAlines);
+
+	//ensure disperison compensation success
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -4; //padDispersion Error Code
+
+	//Attempt to perform FFT and ensure success
+	if (cufftExecC2C(fftPlan, (cufftComplex *)d_fftIn,
+		(cufftComplex *)d_fftOut, CUFFT_FORWARD)
+		!= CUFFT_SUCCESS)
+		errorCode = -3; //FFT Error Code
+
+	//Attempt to crop the data
+	simpleCrop << <32768, 1024 >> >(d_fftOut, d_cropC, fftLength,
+		cropStart, cropRange, numAlines);
+
+	//Ensure crop was successful
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -5; //crop Error Code
+
+	//Attempt to copy data from device to host
+	cudaMemcpy(output, d_cropC, cropRange*numAlines*sizeof(Complex),
+		cudaMemcpyDeviceToHost);
+	/* NOT IN USE
+	//Move from pinned memory to main memory
+	//std::copy(&output[0], &outputC[cropRange*numAlines - 1], &output[0]);
+	//Endure Memcpy success
+	*/
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -2; //MemcpytoHost error code
+
+	return errorCode;
+}
+
+/*
+
+processMagnitudeInterped
+
+This function takes input from the digitizer and outputs the magnitude
+of the region of interest from each a-line as an array of floating
+point numbers. This function assumes you are using interpolated data
+coming from the FPGA
+*/
+
+EXTERN int gpuProcessMagnitudeInterped(
+	float * raw, 
+	float *output)
+{
+	int errorCode = 0; //initializes error code for debugging
+	//Move raw data to pinned memory
+	//std::copy(&raw[0], &raw[rawSize * numAlines - 1], &input[0]);
+	// Attempt to copy raw interferogram to GPU memory
+	cudaMemcpy(d_floatSrc, raw, rawSize * numAlines * sizeof(float),
+		cudaMemcpyHostToDevice);
+
+	//Ensure memory copy success
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -1; //MemcpytoDevice failure error code
+
+	//Attempt to perform dispersion compensation
+	padDispersion << <65535, 1024 >> >(d_floatSrc, d_fftIn, d_disp, d_win,
+		rawSize, fftLength, numAlines);
+
+	//ensure disperison compensation success
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -4; //padDispersion Error Code
+
+	//Attempt to perform FFT and ensure success
+	if (cufftExecC2C(fftPlan, (cufftComplex *)d_fftIn,
+		(cufftComplex *)d_fftOut, CUFFT_FORWARD) != CUFFT_SUCCESS)
+		errorCode = -3; //FFT Error Code
+
+	//Attempt to crop the data and take the magnitude
+	cropAbs << <32768, 1024 >> >(d_fftOut, d_cropF, fftLength, cropStart,
+		cropRange, numAlines);
+
+	//Ensure crop was successful
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -5; //crop Error Code
+
+	//Attempt to copy data from device to host	
+	cudaMemcpy(output, d_cropF, cropRange*numAlines*sizeof(float),
+		cudaMemcpyDeviceToHost);
+	//std::copy(&outputF[0], &outputF[cropRange*numAlines - 1], &output[0]);
+	//Endure Memcpy success
+	if (cudaGetLastError() != cudaSuccess)
+		errorCode = -2; //MemcpytoHost error code
+
+	return errorCode;
+}
 
 /*
 processComplex
@@ -299,7 +571,7 @@ EXTERN int gpuProcessComplex(
 }
 
 /*
-processComplex
+processMagnitude
 
 This function takes input from the digitizer and outputs the magnitude
 of the region of interest from each a-line as an array of floating
@@ -349,6 +621,9 @@ EXTERN int gpuProcessMagnitude(U16 * raw, float *output){
 	return errorCode;
 }
 
+EXTERN int clearInterped(){
+	cudaFree(d_floatSrc);
+}
 /*
 endProgram
 
@@ -484,6 +759,27 @@ EXTERN int gpuUpdateAllParameters(
 	//Sets up the GPU with new parameters
 	gpuProcessSetup(disp, win, rAlineSize, fftS, nAlines, cropS, cropEnd, rtrnComplex);
 	
+	//Returns current gpu status
+	return cudaGetLastError();
+}
+
+EXTERN int gpuUpdateAllParametersInterped(
+	float *disp, //New raw dispersion data
+	float *win, //New window function
+	int rAlineSize, //new RawAlineSize
+	int fftS, //New FFT length
+	int nAlines, //new Number of Alines
+	int cropS,  //new Crop start location
+	int cropEnd, //new crop End location
+	bool rtrnComplex)//flag to outputing complex(true) or float(false)
+{
+	//Clears the current parameters
+	gpuClear();
+	clearInterped();
+
+	//Sets up the GPU with new parameters
+	gpuProcessSetupInterped(disp, win, rAlineSize, fftS, nAlines, cropS, cropEnd, rtrnComplex);
+
 	//Returns current gpu status
 	return cudaGetLastError();
 }

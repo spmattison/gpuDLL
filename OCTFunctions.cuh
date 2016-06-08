@@ -142,3 +142,61 @@ endProgram
 Deallocates memory and destroys the current FFT plan. Must be run prior
 to ending software*/
 EXTERN int gpuClear();
+
+/*
+gpuProcessSetupInterped
+
+Runs once to allocated necessary memory and prepare necessary
+predefined datasets. This function was written for using floating
+point data coming from the FPGA
+*/
+extern "C" int gpuProcessSetupInterped(
+	float *disp, //Raw dispersion phase angles
+	float *win, //Desired window function
+	int fftSize, //Length of the FFT
+	int nAlines, //number of alines
+	int rAlineSize, //length of interferogram
+	int cropS, //start location for the region of interest
+	int cropEnd, //end point for region of interest
+	bool retComplex); //flag for output type
+
+/*************************Process Functions***************************/
+/*
+
+processComplexInterped
+
+This function takes input from the digitizer and outputs the magnitude
+of the region of interest from each a-line as an array of floating
+point numbers. This function assumes you are using interpolated data
+coming from the FPGA
+*/
+
+EXTERN int gpuProcessComplexInterped(
+	float *raw,
+	Complex *output);
+
+/*
+
+processMagnitudeInterped
+
+This function takes input from the digitizer and outputs the magnitude
+of the region of interest from each a-line as an array of floating
+point numbers. This function assumes you are using interpolated data
+coming from the FPGA
+*/
+
+EXTERN int gpuProcessMagnitudeInterped(
+	float * raw,
+	float *output);
+
+EXTERN int clearInterped();
+
+EXTERN int gpuUpdateAllParametersInterped(
+	float *disp, //New raw dispersion data
+	float *win, //New window function
+	int rAlineSize, //new RawAlineSize
+	int fftS, //New FFT length
+	int nAlines, //new Number of Alines
+	int cropS,  //new Crop start location
+	int cropEnd, //new crop End location
+	bool rtrnComplex);

@@ -1,7 +1,7 @@
 #include "OCTFunctions.cuh"
 #include "gpuDLLFunctions.h"
 
-
+int digitizer = 0; // 0 = Alazar, 1 = FPGA
 /*
 setupGPU
 
@@ -9,7 +9,12 @@ called to setup parameters of the GPU, only call once prior to scan start. If an
 to scan parameters, these parameters must be updated
 */
 GPUFUNCSDLL int setupGPU(float *disp, float *win, int rAlineSize, int fftS, int nAlines, int cropS, int cropEnd, bool outputComplex){
-	return (gpuProcessSetup(disp, win, fftS, nAlines, rAlineSize, cropS, cropEnd, outputComplex));
+	if (digitizer = 0){
+		return (gpuProcessSetup(disp, win, fftS, nAlines, rAlineSize, cropS, cropEnd, outputComplex));
+	}
+	else{
+		return (gpuProcessSetupInterped(disp, win, fftS, nAlines, rAlineSize, cropS, cropEnd, outputComplex));
+	}
 }
 
 /*
@@ -20,6 +25,25 @@ Processes an entire dataset as once. Maximum Size is A 16383 Aline x
 */
 GPUFUNCSDLL int processMagnitude(U16 *rawSpectrogram, float *processedData){
 	return (gpuProcessMagnitude(rawSpectrogram, processedData));
+}
+/*
+processComplex
+
+Processes an entire dataset as once. Maximum Size is A 16383 Aline x
+4096 point FFT.
+*/
+GPUFUNCSDLL int processMagnitude(float *rawSpectrogram, float *processedData){
+	return (gpuProcessMagnitudeInterped(rawSpectrogram, processedData));
+}
+
+/*
+processComplex
+
+Processes an entire dataset as once. Maximum Size is A 16383 Aline x
+4096 point FFT.
+*/
+GPUFUNCSDLL int processComplex(float *rawSpectrogram, float *processedData){
+	return (gpuProcessMagnitudeInterped(rawSpectrogram, processedData));
 }
 
 /*
@@ -105,11 +129,17 @@ Clears out allocated GPU memory so that it may be reallocated.
 */
 GPUFUNCSDLL int clearGPUSettings(){
 	gpuClear();
+	if (digitizer != 0){
+		clearInterped();
+	}
 	return 0;
 }
 
 GPUFUNCSDLL int endProgram(){
 	gpuEndProgram();
+	if (digitizer != 0){
+		clearInterped();
+	}
 	return 0;
 }
 
@@ -132,6 +162,9 @@ GPUFUNCSDLL int updateWindow(float *win){
 }
 
 GPUFUNCSDLL int updateAllParameters(float *disp, float *win, int rAlineSize, int fftS, int nAlines, int cropS, int cropEnd, bool outputCom){
+	if (digitizer != 0){
+		return gpuUpdateAllParametersInterped(disp, win, rAlineSize, fftS, nAlines, cropS, cropEnd, outputCom);
+	}
 	return gpuUpdateAllParameters(disp, win, rAlineSize, fftS, nAlines, cropS, cropEnd, outputCom);
 }
 
