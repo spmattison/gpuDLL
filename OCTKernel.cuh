@@ -124,3 +124,24 @@ __global__ void simpleCrop(
 	int cropRange, //Length of the region of interest
 	int nAlines); //Number of A-lines in the batch process
 
+/*
+padDispersion
+
+This function performs dispersion compensation and windowing from
+preloaded arrays. DC subtration is not performed.
+
+The result is added to a predefined zero padded array. Note that this
+means that either the FFT will require an separate target for processed
+data or the array will have to be manually reset between runs.
+There are other solutions to this problem; however, memory is currently
+not the limiting factor of this GPU and this method will work better on
+older GPUs.
+*/
+__global__ void padDispersionInterped(
+	float *src, //array the FPGA, interpolated interferogram
+	Complex *toProcess, //array destination for further processing
+	Complex *dispArray, //pre-loaded arrray of dispersion elements
+	float *window, //preloaded window function
+	int rawL,  //length of the raw interferogram
+	int fftL,  //target length of the FFT
+	int nAlines); //number of Alines being batch processed

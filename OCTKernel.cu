@@ -120,6 +120,58 @@ __global__ void padDispersion(
 } //end padDispersion
 
 /*
+padDispersion
+
+This function performs dispersion compensation and windowing from
+preloaded arrays. DC subtration is not performed.
+
+The result is added to a predefined zero padded array. Note that this
+means that either the FFT will require an separate target for processed
+data or the array will have to be manually reset between runs.
+There are other solutions to this problem; however, memory is currently
+not the limiting factor of this GPU and this method will work better on
+older GPUs.
+*/
+__global__ void padDispersionInterped(
+	float *src, //array the FPGA, interpolated interferogram
+	Complex *toProcess, //array destination for further processing
+	Complex *dispArray, //pre-loaded arrray of dispersion elements
+	float *window, //preloaded window function
+	int rawL,  //length of the raw interferogram
+	int fftL,  //target length of the FFT
+	int nAlines){
+	//calculate the index of the current thread
+	int thrId = blockIdx.x * blockDim.x + threadIdx.x;
+
+	//ensure the current thread is valid for the target range
+	if (thrId < (nAlines*rawL)){
+
+		//determine the location the data should be written
+		int outId = int(thrId / rawL)*fftL + (thrId%rawL);
+
+		//determine which location to read for dispersion and windowing
+		int rId = thrId % rawL;
+
+		//convert the input signal from U16 to raw.
+		//temp used to reduce number of global memory reads and writes
+		float temp = src[thrId];
+
+		//A placeholder is used to reduce number of global memory reads
+		//and writes. Dispersion compensation is performed.
+		Complex output = comByFloatMult(dispArray[rId], temp);
+
+		//Windowing is performed.
+		output = comByFloatMult(output, window[rId]);
+
+		//result is written to an predefined, zero-paddedarray
+		toProcess[outId] = output;
+
+
+		//The following code section is deprecated following the switch
+		//from cuFloatComplex to float2
+		//toProcess[outId] = make_cuFloatComplex(output.x, output.y);
+} //End PadDispersionInterped
+/*
 cropAbs
 
 Despite the name, this is not a 6 pack due to working in a field.
