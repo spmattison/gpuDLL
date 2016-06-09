@@ -1,6 +1,7 @@
 #include "OCTFunctions.cuh"
 #include "gpuDLLFunctions.h"
 
+float *monsterMash;
 
 int digitizer = 0; // 0 = Alazar, 1 = FPGA
 /*
@@ -18,6 +19,18 @@ GPUFUNCSDLL int setupGPU(float *disp, float *win, int rAlineSize, int fftS, int 
 	}
 }
 
+GPUFUNCSDLL void theyDidTheMash(int size){
+	monsterMash = (float*)malloc(size*sizeof(float));
+	for (int i = 0; i < size; ++i){
+		monsterMash[i] = i;
+	}
+}
+
+GPUFUNCSDLL void theyDidTheMonsterMash(float* graveYardSmash, int size){
+	for (int i = 0; i < size; ++i){
+		graveYardSmash[i] = monsterMash[i] * 10;
+	}
+}
 /*
 processMagnitude
 
